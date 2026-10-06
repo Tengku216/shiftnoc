@@ -894,5 +894,96 @@ export const FirestoreDB = {
       handleFirestoreError(err, OperationType.WRITE, docPath);
     }
   },
+
+  async importDatabase(jsonStr: string): Promise<boolean> {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (!parsed || typeof parsed !== 'object') return false;
+
+      const staff: Staff[] = Array.isArray(parsed.staff) ? parsed.staff : [];
+      const schedules: ScheduleAssignment[] = Array.isArray(parsed.schedules) ? parsed.schedules : [];
+      const leaves: Leave[] = Array.isArray(parsed.leaves) ? parsed.leaves : [];
+      const holidays: Holiday[] = Array.isArray(parsed.holidays) ? parsed.holidays : [];
+      const delegations: DelegationLog[] = Array.isArray(parsed.delegations) ? parsed.delegations : [];
+      const settings: WorkRulesSettings = parsed.settings || DEFAULT_SETTINGS;
+
+      // 1. Reconcile / replace Staff in Firestore
+      if (staff.length > 0) {
+        await FirestoreDB.saveStaffList(staff);
+      }
+
+      // 2. Reconcile / replace Schedules in Firestore
+      await FirestoreDB.saveSchedules(schedules);
+
+      // 3. Reconcile / replace Leaves in Firestore
+      await FirestoreDB.saveLeavesBatch(leaves);
+
+      // 4. Reconcile / replace Holidays in Firestore
+      if (holidays.length > 0) {
+        const hSnap = await getDocs(collection(db, 'roster_holidays'));
+        const hNewIds = new Set(holidays.map(h => h.id));
+        const hBatch = writeBatch(db);
+        hSnap.forEach(d => {
+          if (!hNewIds.has(d.id)) hBatch.delete(d.ref);
+        });
+        for (const h of holidays) {
+          hBatch.set(doc(db, 'roster_holidays', h.id), {
+            id: h.id,
+            date: h.date,
+            name: h.name,
+            type: h.type,
+            region: h.region || 'Nasional',
+          });
+        }
+        await hBatch.commit();
+      }
+
+      // 5. Reconcile / replace Delegations in Firestore
+      if (delegations.length > 0) {
+        const dSnap = await getDocs(collection(db, 'roster_delegations'));
+        const dNewIds = new Set(delegations.map(d => d.id));
+        const dBatch = writeBatch(db);
+        dSnap.forEach(d => {
+          if (!dNewIds.has(d.id)) dBatch.delete(d.ref);
+        });
+        for (const d of delegations) {
+          dBatch.set(doc(db, 'roster_delegations', d.id), {
+            id: d.id,
+            title: d.title,
+            content: d.content,
+            authorName: d.authorName,
+            assignedTo: d.assignedTo || '',
+            priority: d.priority || 'normal',
+            status: d.status || 'pending',
+            dateStr: d.dateStr,
+            timeStr: d.timeStr,
+            createdAt: d.createdAt || new Date().toISOString(),
+          });
+        }
+        await dBatch.commit();
+      }
+
+      // 6. Save Settings in Firestore
+      await FirestoreDB.saveSettings(settings);
+
+      // 7. Also update LocalDB cache
+      LocalDB.importDatabase(jsonStr);
+
+      return true;
+    } catch (err) {
+      console.error('FirestoreDB.importDatabase error:', err);
+      return false;
+    }
+  },
+
+  async clearCloudDatabase(): Promise<void> {
+    const collections = ['roster_staff', 'roster_schedules', 'roster_leaves', 'roster_holidays', 'roster_delegations'];
+    for (const colName of collections) {
+      const snap = await getDocs(collection(db, colName));
+      const batch = writeBatch(db);
+      snap.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+  },
 };
 

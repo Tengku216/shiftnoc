@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Staff, Leave, Holiday, WorkRulesSettings, DynamicBgTheme, ShiftType } from '../../types';
-import { LocalDB } from '../../services/db';
+import { Staff, Leave, Holiday, WorkRulesSettings, DynamicBgTheme, ShiftType, ScheduleAssignment, DelegationLog } from '../../types';
+import { LocalDB, FirestoreDB } from '../../services/db';
 import {
   Users,
   Clock,
@@ -18,12 +18,16 @@ import {
   Download,
   Upload,
   RotateCcw,
+  Cloud,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface SettingsViewProps {
   staffList: Staff[];
+  schedules?: ScheduleAssignment[];
   leaves: Leave[];
   holidays: Holiday[];
+  delegations?: DelegationLog[];
   settings: WorkRulesSettings;
   onAddStaff: (name: string, role?: string, phone?: string) => void;
   onUpdateStaff: (id: string, updates: Partial<Staff>) => void;
@@ -40,8 +44,10 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   staffList,
+  schedules = [],
   leaves,
   holidays,
+  delegations = [],
   settings,
   onAddStaff,
   onUpdateStaff,
@@ -132,9 +138,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     showFeedback('Hari libur berhasil ditambahkan');
   };
 
-  // Export / Import JSON
+  const [isImporting, setIsImporting] = useState(false);
+
+  // Export / Import JSON (Cloud-First 1 Pintu)
   const handleExport = () => {
-    const jsonStr = LocalDB.exportDatabase();
+    const backup = {
+      staff: staffList,
+      schedules: schedules,
+      leaves: leaves,
+      holidays: holidays,
+      settings: settings,
+      delegations: delegations,
+      exportedAt: new Date().toISOString(),
+      version: '2.0.0',
+    };
+    const jsonStr = JSON.stringify(backup, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -147,15 +165,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setIsImporting(true);
+    showFeedback('Mengunggah & menyinkronkan data ke Cloud Firestore...');
+
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target?.result as string;
-      const success = LocalDB.importDatabase(content);
-      if (success) {
-        onReloadAll();
-        showFeedback('Data roster berhasil diimpor!');
-      } else {
-        showFeedback('Gagal mengimpor file backup.');
+      try {
+        const success = await FirestoreDB.importDatabase(content);
+        if (success) {
+          onReloadAll();
+          showFeedback('✅ Data berhasil diimpor ke Cloud & disinkronkan ke seluruh perangkat!');
+        } else {
+          showFeedback('❌ Format file backup JSON tidak valid.');
+        }
+      } catch (err) {
+        console.error('Import error:', err);
+        showFeedback('❌ Gagal mengimpor ke cloud database.');
+      } finally {
+        setIsImporting(false);
+        e.target.value = '';
       }
     };
     reader.readAsText(file);
@@ -1111,14 +1140,43 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       )}
 
-      {/* 7. DATABASE & BACKUP */}
+      {/* 7. DATABASE & BACKUP (CLOUD 1 PINTU) */}
       {activeSubTab === 'database' && (
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
-          <div className="pb-3 border-b border-slate-800">
-            <h3 className="font-bold text-base text-white">Database Lokal & Cadangan Data</h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Semua data disimpan di media penyimpanan lokal peramban. Anda dapat mencadangkan atau memulihkan data kapan saja.
-            </p>
+          <div className="pb-3 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Cloud className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-bold text-base text-white">Cloud Database Terpusat (1 Pintu)</h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Semua data terhubung langsung ke Google Cloud Firestore. Setiap perubahan atau import langsung disinkronkan ke seluruh browser & perangkat secara realtime.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-xs shrink-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Realtime Sync: Aktif</span>
+            </div>
+          </div>
+
+          {/* Cloud Status Summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/50 p-4 rounded-xl border border-white/5 text-xs">
+            <div>
+              <span className="text-slate-400 block text-[11px]">Database Cloud:</span>
+              <span className="font-mono font-bold text-amber-300">Firestore (Live)</span>
+            </div>
+            <div>
+              <span className="text-slate-400 block text-[11px]">Total Personel:</span>
+              <span className="font-mono font-bold text-white">{staffList.length} Staff</span>
+            </div>
+            <div>
+              <span className="text-slate-400 block text-[11px]">Penugasan Shift:</span>
+              <span className="font-mono font-bold text-white">{schedules.length} Entri</span>
+            </div>
+            <div>
+              <span className="text-slate-400 block text-[11px]">Delegation Log:</span>
+              <span className="font-mono font-bold text-white">{delegations.length} Catatan</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1129,28 +1187,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <span>Export Backup (JSON)</span>
               </div>
               <p className="text-xs text-slate-400">
-                Unduh seluruh data staff, shift, jadwal, cuti, dan holiday dalam format JSON.
+                Unduh seluruh data aktif saat ini (Staff, Jadwal, Cuti, Libur, Delegasi, Aturan) ke file backup JSON.
               </p>
               <button
                 onClick={handleExport}
-                className="w-full py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-colors"
+                className="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
               >
-                Unduh Backup
+                Unduh Backup Sekarang
               </button>
             </div>
 
             {/* Import */}
-            <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-800 space-y-3">
+            <div className="p-4 rounded-2xl bg-slate-950/40 border border-emerald-500/20 space-y-3">
               <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
                 <Upload className="w-4 h-4" />
-                <span>Import Backup</span>
+                <span>Import Backup ke Cloud</span>
               </div>
               <p className="text-xs text-slate-400">
-                Pulihkan data dari file JSON cadangan yang pernah Anda simpan sebelumnya.
+                Unggah file JSON valid Anda. Sistem akan menimpa data lama di Cloud Firestore dan seketika menyinkronkannya ke semua browser.
               </p>
-              <label className="w-full py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center cursor-pointer text-center">
-                Pilih File JSON
-                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+              <label
+                className={`w-full py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center text-center ${
+                  isImporting
+                    ? 'bg-emerald-600/50 text-white cursor-wait'
+                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer shadow-lg shadow-emerald-500/10'
+                }`}
+              >
+                {isImporting ? 'Mengunggah ke Cloud...' : 'Pilih File JSON & Unggah'}
+                <input
+                  type="file"
+                  accept=".json"
+                  disabled={isImporting}
+                  onChange={handleImport}
+                  className="hidden"
+                />
               </label>
             </div>
 
@@ -1161,17 +1231,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <span>Bersihkan Cache & Reset</span>
               </div>
               <p className="text-xs text-slate-400">
-                Bersihkan cache lama peramban dan inisialisasi ulang database bersih untuk deployment.
+                Bersihkan cache lokal peramban dan inisialisasi ulang database bersih untuk deployment.
               </p>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (confirm('Bersihkan seluruh cache browser dan inisialisasi ulang database NOC bersih?')) {
                     LocalDB.clearCacheAndReinit();
+                    await FirestoreDB.initCloudData();
                     onReloadAll();
                     showFeedback('Cache browser berhasil dibersihkan & database diinisialisasi ulang');
                   }
                 }}
-                className="w-full py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs border border-rose-500/30 transition-colors cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs border border-rose-500/30 transition-colors cursor-pointer"
               >
                 Bersihkan Cache & Reset
               </button>

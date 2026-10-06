@@ -178,8 +178,10 @@ export default function App() {
           {activeTab === 'pengaturan' && (
             <SettingsView
               staffList={staffList}
+              schedules={schedules}
               leaves={leaves}
               holidays={holidays}
+              delegations={delegations}
               settings={settings}
               onAddStaff={addStaff}
               onUpdateStaff={updateStaff}

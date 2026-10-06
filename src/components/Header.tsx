@@ -68,8 +68,14 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Right: Realtime WIB Clock & Date */}
-      <div className="flex items-center gap-4 sm:gap-6 text-right">
+      {/* Right: Cloud Sync Status & Realtime WIB Clock & Date */}
+      <div className="flex items-center gap-2.5 sm:gap-4 text-right">
+        {/* Subtle Cloud Sync Indicator */}
+        <div className="hidden sm:flex items-center gap-1.5 bg-slate-950/60 backdrop-blur-md px-3 py-2 rounded-xl border border-white/15 shadow-md text-xs font-mono text-emerald-300">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>Cloud Sync Aktif</span>
+        </div>
+
         <div className="bg-slate-950/60 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/15 shadow-md">
           <div className="flex items-center justify-end gap-2 text-amber-300 font-mono font-bold text-base sm:text-lg tabular-nums tracking-tight drop-shadow-sm">
             <Clock className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-300 shrink-0" />
