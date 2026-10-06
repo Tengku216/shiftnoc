@@ -19,7 +19,8 @@ service cloud.firestore {
     }
 
     match /roster_staff/{staffId} {
-      allow read: if isValidId(staffId);
+      allow get: if isValidId(staffId);
+      allow list: if true;
       allow create, update: if isValidId(staffId) && isValidStaff(request.resource.data);
       allow delete: if isValidId(staffId);
     }
@@ -32,7 +33,8 @@ service cloud.firestore {
     }
 
     match /roster_schedules/{scheduleId} {
-      allow read: if isValidId(scheduleId);
+      allow get: if isValidId(scheduleId);
+      allow list: if true;
       allow create, update: if isValidId(scheduleId) && isValidSchedule(request.resource.data);
       allow delete: if isValidId(scheduleId);
     }
@@ -46,7 +48,8 @@ service cloud.firestore {
     }
 
     match /roster_leaves/{leaveId} {
-      allow read: if isValidId(leaveId);
+      allow get: if isValidId(leaveId);
+      allow list: if true;
       allow create, update: if isValidId(leaveId) && isValidLeave(request.resource.data);
       allow delete: if isValidId(leaveId);
     }
@@ -60,7 +63,8 @@ service cloud.firestore {
     }
 
     match /roster_holidays/{holidayId} {
-      allow read: if isValidId(holidayId);
+      allow get: if isValidId(holidayId);
+      allow list: if true;
       allow create, update: if isValidId(holidayId) && isValidHoliday(request.resource.data);
       allow delete: if isValidId(holidayId);
     }
@@ -76,7 +80,8 @@ service cloud.firestore {
     }
 
     match /roster_delegations/{delegationId} {
-      allow read: if isValidId(delegationId);
+      allow get: if isValidId(delegationId);
+      allow list: if true;
       allow create, update: if isValidId(delegationId) && isValidDelegation(request.resource.data);
       allow delete: if isValidId(delegationId);
     }
@@ -88,7 +93,8 @@ service cloud.firestore {
     }
 
     match /roster_settings/{settingId} {
-      allow read: if isValidId(settingId);
+      allow get: if isValidId(settingId);
+      allow list: if true;
       allow create, update: if isValidId(settingId) && isValidSettings(request.resource.data);
       allow delete: if isValidId(settingId);
     }

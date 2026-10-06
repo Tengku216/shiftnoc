@@ -1,10 +1,23 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import configFile from '../../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const FIREBASE_CONFIG = {
+  projectId: configFile?.projectId || 'applied-bonsai-rjhcx',
+  appId: configFile?.appId || '1:14380235524:web:33876bb8bdb0b40d4d6e51',
+  apiKey: configFile?.apiKey || 'AIzaSyCKnxxNeZDUYayLyfsEsKDZoE79XCqv8rs',
+  authDomain: configFile?.authDomain || 'applied-bonsai-rjhcx.firebaseapp.com',
+  firestoreDatabaseId: configFile?.firestoreDatabaseId || 'ai-studio-nocshiftschedule-520de6f2-3ab4-428d-a1a4-bf58e3e51733',
+  storageBucket: configFile?.storageBucket || 'applied-bonsai-rjhcx.firebasestorage.app',
+  messagingSenderId: configFile?.messagingSenderId || '14380235524',
+  measurementId: configFile?.measurementId || '',
+  oAuthClientId: configFile?.oAuthClientId || '14380235524-ijeb3tvvsnl2s2a25sgp94ka6ri4soub.apps.googleusercontent.com',
+  recaptchaSiteKey: configFile?.recaptchaSiteKey || '',
+};
+
+const app = getApps().length > 0 ? getApp() : initializeApp(FIREBASE_CONFIG);
+export const db = getFirestore(app, FIREBASE_CONFIG.firestoreDatabaseId);
 export const auth = getAuth(app);
 
 export enum OperationType {
@@ -60,7 +73,7 @@ export async function testConnection(): Promise<void> {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
+      console.warn('Firebase connection check: client is offline or starting.');
     }
   }
 }

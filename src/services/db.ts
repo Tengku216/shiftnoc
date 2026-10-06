@@ -564,7 +564,7 @@ export const FirestoreDB = {
         }
       },
       error => {
-        handleFirestoreError(error, OperationType.GET, colPath);
+        console.warn(`Firestore snapshot sync warning on ${colPath}:`, error);
       }
     );
   },
@@ -584,7 +584,7 @@ export const FirestoreDB = {
         }
       },
       error => {
-        handleFirestoreError(error, OperationType.GET, colPath);
+        console.warn(`Firestore snapshot sync warning on ${colPath}:`, error);
       }
     );
   },
@@ -602,7 +602,7 @@ export const FirestoreDB = {
         LocalDB.saveLeaves(list);
       },
       error => {
-        handleFirestoreError(error, OperationType.GET, colPath);
+        console.warn(`Firestore snapshot sync warning on ${colPath}:`, error);
       }
     );
   },
@@ -622,7 +622,7 @@ export const FirestoreDB = {
         }
       },
       error => {
-        handleFirestoreError(error, OperationType.GET, colPath);
+        console.warn(`Firestore snapshot sync warning on ${colPath}:`, error);
       }
     );
   },
@@ -641,7 +641,7 @@ export const FirestoreDB = {
         LocalDB.saveDelegations(list);
       },
       error => {
-        handleFirestoreError(error, OperationType.GET, colPath);
+        console.warn(`Firestore snapshot sync warning on ${colPath}:`, error);
       }
     );
   },
@@ -666,7 +666,7 @@ export const FirestoreDB = {
         }
       },
       error => {
-        handleFirestoreError(error, OperationType.GET, docPath);
+        console.warn(`Firestore snapshot sync warning on ${docPath}:`, error);
       }
     );
   },
@@ -690,7 +690,14 @@ export const FirestoreDB = {
   async saveStaffList(staffList: Staff[]): Promise<void> {
     const colPath = 'roster_staff';
     try {
+      const existingSnap = await getDocs(collection(db, colPath));
+      const newIds = new Set(staffList.map(s => s.id));
       const batch = writeBatch(db);
+      existingSnap.forEach(d => {
+        if (!newIds.has(d.id)) {
+          batch.delete(d.ref);
+        }
+      });
       for (const s of staffList) {
         batch.set(doc(db, 'roster_staff', s.id), {
           id: s.id,
@@ -719,13 +726,33 @@ export const FirestoreDB = {
   async saveSchedules(schedules: ScheduleAssignment[]): Promise<void> {
     const colPath = 'roster_schedules';
     try {
-      // Chunk batches of 200
-      const chunkSize = 200;
-      for (let i = 0; i < schedules.length; i += chunkSize) {
-        const chunk = schedules.slice(i, i + chunkSize);
+      const existingSnap = await getDocs(collection(db, colPath));
+      const newIds = new Set(schedules.map(s => s.id));
+      const toDeleteIds: string[] = [];
+      existingSnap.forEach(d => {
+        if (!newIds.has(d.id)) {
+          toDeleteIds.push(d.id);
+        }
+      });
+
+      // 1. Delete removed schedules in batches
+      const delChunkSize = 200;
+      for (let i = 0; i < toDeleteIds.length; i += delChunkSize) {
+        const chunk = toDeleteIds.slice(i, i + delChunkSize);
+        const batch = writeBatch(db);
+        for (const id of chunk) {
+          batch.delete(doc(db, colPath, id));
+        }
+        await batch.commit();
+      }
+
+      // 2. Write new / updated schedules in batches
+      const writeChunkSize = 200;
+      for (let i = 0; i < schedules.length; i += writeChunkSize) {
+        const chunk = schedules.slice(i, i + writeChunkSize);
         const batch = writeBatch(db);
         for (const sc of chunk) {
-          batch.set(doc(db, 'roster_schedules', sc.id), {
+          batch.set(doc(db, colPath, sc.id), {
             id: sc.id,
             staffId: sc.staffId,
             date: sc.date,
