@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidStaff(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 150
+        && data.active is bool
+        && (data.order is int || data.order is float);
+    }
+
+    match /roster_staff/{staffId} {
+      allow read: if isValidId(staffId);
+      allow create, update: if isValidId(staffId) && isValidStaff(request.resource.data);
+      allow delete: if isValidId(staffId);
+    }
+
+    function isValidSchedule(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.staffId is string && data.staffId.size() <= 128
+        && data.date is string && data.date.size() <= 20
+        && data.shiftId is string && data.shiftId.size() <= 50;
+    }
+
+    match /roster_schedules/{scheduleId} {
+      allow read: if isValidId(scheduleId);
+      allow create, update: if isValidId(scheduleId) && isValidSchedule(request.resource.data);
+      allow delete: if isValidId(scheduleId);
+    }
+
+    function isValidLeave(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.staffId is string && data.staffId.size() <= 128
+        && data.dateStart is string && data.dateStart.size() <= 20
+        && data.dateEnd is string && data.dateEnd.size() <= 20
+        && data.type is string && data.type.size() <= 50;
+    }
+
+    match /roster_leaves/{leaveId} {
+      allow read: if isValidId(leaveId);
+      allow create, update: if isValidId(leaveId) && isValidLeave(request.resource.data);
+      allow delete: if isValidId(leaveId);
+    }
+
+    function isValidHoliday(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.date is string && data.date.size() <= 20
+        && data.name is string && data.name.size() <= 150
+        && data.type is string && data.type.size() <= 50
+        && data.region is string && data.region.size() <= 100;
+    }
+
+    match /roster_holidays/{holidayId} {
+      allow read: if isValidId(holidayId);
+      allow create, update: if isValidId(holidayId) && isValidHoliday(request.resource.data);
+      allow delete: if isValidId(holidayId);
+    }
+
+    function isValidDelegation(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 200
+        && data.content is string && data.content.size() <= 2000
+        && data.authorName is string && data.authorName.size() <= 100
+        && data.priority in ['normal', 'important', 'urgent']
+        && data.status in ['pending', 'in_progress', 'done']
+        && data.dateStr is string && data.dateStr.size() <= 20;
+    }
+
+    match /roster_delegations/{delegationId} {
+      allow read: if isValidId(delegationId);
+      allow create, update: if isValidId(delegationId) && isValidDelegation(request.resource.data);
+      allow delete: if isValidId(delegationId);
+    }
+
+    function isValidSettings(data) {
+      return data.id is string && data.id.size() <= 50
+        && data.timezone is string && data.timezone.size() <= 50
+        && data.region is string && data.region.size() <= 100;
+    }
+
+    match /roster_settings/{settingId} {
+      allow read: if isValidId(settingId);
+      allow create, update: if isValidId(settingId) && isValidSettings(request.resource.data);
+      allow delete: if isValidId(settingId);
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Staff, ScheduleAssignment, Leave, Holiday, WorkRulesSettings, ShiftType, ActiveInputMode, DelegationLog } from '../types';
-import { LocalDB } from '../services/db';
+import { Staff, ScheduleAssignment, Leave, Holiday, WorkRulesSettings, DelegationLog } from '../types';
+import { LocalDB, FirestoreDB } from '../services/db';
 
 export function useRosterData() {
   const [staffList, setStaffList] = useState<Staff[]>([]);
@@ -24,7 +24,55 @@ export function useRosterData() {
   }, []);
 
   useEffect(() => {
+    // 1. Initial fast local load
     reloadData();
+
+    // 2. Initialize or migrate cloud data in the background
+    FirestoreDB.initCloudData().catch(err => {
+      console.warn('Firestore cloud sync init:', err);
+    });
+
+    // 3. Realtime subscriptions across all clients & browsers
+    const unsubStaff = FirestoreDB.subscribeStaff(cloudStaff => {
+      if (cloudStaff && cloudStaff.length > 0) {
+        setStaffList(cloudStaff);
+      }
+    });
+
+    const unsubSchedules = FirestoreDB.subscribeSchedules(cloudSchedules => {
+      if (cloudSchedules && cloudSchedules.length > 0) {
+        setSchedules(cloudSchedules);
+      }
+    });
+
+    const unsubLeaves = FirestoreDB.subscribeLeaves(cloudLeaves => {
+      setLeaves(cloudLeaves);
+    });
+
+    const unsubHolidays = FirestoreDB.subscribeHolidays(cloudHolidays => {
+      if (cloudHolidays && cloudHolidays.length > 0) {
+        setHolidays(cloudHolidays);
+      }
+    });
+
+    const unsubDelegations = FirestoreDB.subscribeDelegations(cloudDelegations => {
+      setDelegations(cloudDelegations);
+    });
+
+    const unsubSettings = FirestoreDB.subscribeSettings(cloudSettings => {
+      if (cloudSettings) {
+        setSettings(cloudSettings);
+      }
+    });
+
+    return () => {
+      unsubStaff();
+      unsubSchedules();
+      unsubLeaves();
+      unsubHolidays();
+      unsubDelegations();
+      unsubSettings();
+    };
   }, [reloadData]);
 
   // STAFF CRUD
@@ -40,18 +88,24 @@ export function useRosterData() {
     const updated = [...staffList, newStaff];
     setStaffList(updated);
     LocalDB.saveStaff(updated);
+    FirestoreDB.saveStaff(newStaff).catch(console.error);
   };
 
   const updateStaff = (id: string, updates: Partial<Staff>) => {
     const updated = staffList.map(s => (s.id === id ? { ...s, ...updates } : s));
     setStaffList(updated);
     LocalDB.saveStaff(updated);
+    const target = updated.find(s => s.id === id);
+    if (target) {
+      FirestoreDB.saveStaff(target).catch(console.error);
+    }
   };
 
   const deleteStaff = (id: string) => {
     const updated = staffList.filter(s => s.id !== id);
     setStaffList(updated);
     LocalDB.saveStaff(updated);
+    FirestoreDB.deleteStaff(id).catch(console.error);
   };
 
   const reorderStaff = (id: string, direction: 'up' | 'down') => {
@@ -70,18 +124,21 @@ export function useRosterData() {
     const normalized = copy.map((s, i) => ({ ...s, order: i + 1 }));
     setStaffList(normalized);
     LocalDB.saveStaff(normalized);
+    FirestoreDB.saveStaffList(normalized).catch(console.error);
   };
 
   // SCHEDULE CRUD
   const saveBatchSchedules = (newSchedules: ScheduleAssignment[]) => {
     setSchedules(newSchedules);
     LocalDB.saveSchedules(newSchedules);
+    FirestoreDB.saveSchedules(newSchedules).catch(console.error);
   };
 
   // LEAVES CRUD
   const saveBatchLeaves = (newLeaves: Leave[]) => {
     setLeaves(newLeaves);
     LocalDB.saveLeaves(newLeaves);
+    FirestoreDB.saveLeavesBatch(newLeaves).catch(console.error);
   };
 
   const addLeave = (leave: Omit<Leave, 'id'>) => {
@@ -92,18 +149,24 @@ export function useRosterData() {
     const updated = [...leaves, newLeave];
     setLeaves(updated);
     LocalDB.saveLeaves(updated);
+    FirestoreDB.saveLeave(newLeave).catch(console.error);
   };
 
   const updateLeave = (id: string, updates: Partial<Leave>) => {
     const updated = leaves.map(l => (l.id === id ? { ...l, ...updates } : l));
     setLeaves(updated);
     LocalDB.saveLeaves(updated);
+    const target = updated.find(l => l.id === id);
+    if (target) {
+      FirestoreDB.saveLeave(target).catch(console.error);
+    }
   };
 
   const deleteLeave = (id: string) => {
     const updated = leaves.filter(l => l.id !== id);
     setLeaves(updated);
     LocalDB.saveLeaves(updated);
+    FirestoreDB.deleteLeave(id).catch(console.error);
   };
 
   // HOLIDAYS CRUD
@@ -115,18 +178,24 @@ export function useRosterData() {
     const updated = [...holidays, newHoliday];
     setHolidays(updated);
     LocalDB.saveHolidays(updated);
+    FirestoreDB.saveHoliday(newHoliday).catch(console.error);
   };
 
   const updateHoliday = (id: string, updates: Partial<Holiday>) => {
     const updated = holidays.map(h => (h.id === id ? { ...h, ...updates } : h));
     setHolidays(updated);
     LocalDB.saveHolidays(updated);
+    const target = updated.find(h => h.id === id);
+    if (target) {
+      FirestoreDB.saveHoliday(target).catch(console.error);
+    }
   };
 
   const deleteHoliday = (id: string) => {
     const updated = holidays.filter(h => h.id !== id);
     setHolidays(updated);
     LocalDB.saveHolidays(updated);
+    FirestoreDB.deleteHoliday(id).catch(console.error);
   };
 
   // DELEGATION LOGS CRUD
@@ -140,9 +209,13 @@ export function useRosterData() {
     timeStr = ''
   ) => {
     const now = new Date();
-    const defaultDate = dateStr || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const defaultTime = timeStr || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    
+    const defaultDate =
+      dateStr ||
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const defaultTime =
+      timeStr ||
+      `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
     const newLog: DelegationLog = {
       id: `del-${Date.now()}`,
       title: title.trim(),
@@ -158,18 +231,24 @@ export function useRosterData() {
     const updated = [newLog, ...delegations];
     setDelegations(updated);
     LocalDB.saveDelegations(updated);
+    FirestoreDB.saveDelegation(newLog).catch(console.error);
   };
 
   const updateDelegation = (id: string, updates: Partial<DelegationLog>) => {
     const updated = delegations.map(d => (d.id === id ? { ...d, ...updates } : d));
     setDelegations(updated);
     LocalDB.saveDelegations(updated);
+    const target = updated.find(d => d.id === id);
+    if (target) {
+      FirestoreDB.saveDelegation(target).catch(console.error);
+    }
   };
 
   const deleteDelegation = (id: string) => {
     const updated = delegations.filter(d => d.id !== id);
     setDelegations(updated);
     LocalDB.saveDelegations(updated);
+    FirestoreDB.deleteDelegation(id).catch(console.error);
   };
 
   const toggleDelegationStatus = (id: string) => {
@@ -181,6 +260,10 @@ export function useRosterData() {
     });
     setDelegations(updated);
     LocalDB.saveDelegations(updated);
+    const target = updated.find(d => d.id === id);
+    if (target) {
+      FirestoreDB.saveDelegation(target).catch(console.error);
+    }
   };
 
   // SETTINGS
@@ -188,11 +271,13 @@ export function useRosterData() {
     const merged = { ...settings, ...newSettings };
     setSettings(merged);
     LocalDB.saveSettings(merged);
+    FirestoreDB.saveSettings(merged).catch(console.error);
   };
 
   // RESET
   const resetToSampleData = () => {
     LocalDB.resetToDefaults();
+    FirestoreDB.initCloudData().catch(console.error);
     reloadData();
   };
 

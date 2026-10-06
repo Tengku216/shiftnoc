@@ -1,4 +1,15 @@
 import { Staff, ShiftConfig, ShiftType, ScheduleAssignment, Leave, Holiday, WorkRulesSettings, DelegationLog } from '../types';
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  getDocs,
+  onSnapshot,
+  writeBatch,
+  Unsubscribe,
+} from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from './firebase';
 
 const STORAGE_KEYS = {
   STAFF: 'noc_roster_staff_prod_v1',
@@ -405,3 +416,456 @@ export const LocalDB = {
     }
   },
 };
+
+// ==========================================
+// Firestore Cloud Persistent Database
+// ==========================================
+
+export const FirestoreDB = {
+  async initCloudData(): Promise<void> {
+    const staffColPath = 'roster_staff';
+    try {
+      const snap = await getDocs(collection(db, staffColPath));
+      if (!snap.empty) {
+        // Cloud database is already populated
+        return;
+      }
+    } catch (err) {
+      console.warn('Initial cloud staff check failed, will attempt fallback seed:', err);
+    }
+
+    // First time cloud initialization:
+    // Migrate existing local data (so user's current modifications are kept) or defaults
+    const localStaff = LocalDB.getStaff();
+    const localSchedules = LocalDB.getSchedules();
+    const localLeaves = LocalDB.getLeaves();
+    const localHolidays = LocalDB.getHolidays();
+    const localDelegations = LocalDB.getDelegations();
+    const localSettings = LocalDB.getSettings();
+
+    const staffToSeed = localStaff.length > 0 ? localStaff : DEFAULT_STAFF;
+    const schedulesToSeed = localSchedules.length > 0 ? localSchedules : generateSeedSchedule();
+    const leavesToSeed = localLeaves.length > 0 ? localLeaves : DEFAULT_LEAVES;
+    const holidaysToSeed = localHolidays.length > 0 ? localHolidays : DEFAULT_HOLIDAYS;
+    const delegationsToSeed = localDelegations.length > 0 ? localDelegations : DEFAULT_DELEGATIONS;
+    const settingsToSeed = localSettings || DEFAULT_SETTINGS;
+
+    try {
+      // 1. Seed Staff
+      const staffBatch = writeBatch(db);
+      for (const s of staffToSeed) {
+        staffBatch.set(doc(db, 'roster_staff', s.id), {
+          id: s.id,
+          name: s.name,
+          active: s.active,
+          order: s.order,
+          role: s.role || 'NOC Engineer',
+          phone: s.phone || '',
+        });
+      }
+      await staffBatch.commit();
+
+      // 2. Seed Settings
+      await setDoc(doc(db, 'roster_settings', 'global'), {
+        id: 'global',
+        timezone: settingsToSeed.timezone || 'Asia/Jakarta',
+        region: settingsToSeed.region || 'Jawa Barat',
+        targetHoursPerMonth: settingsToSeed.targetHoursPerMonth || 168,
+        workDaysPerWeek: settingsToSeed.workDaysPerWeek || 5,
+        autoCalculateOvertime: settingsToSeed.autoCalculateOvertime ?? true,
+        backgroundTheme: settingsToSeed.backgroundTheme || 'auto',
+        bgDarkOverlay: settingsToSeed.bgDarkOverlay ?? 75,
+        bgBlur: settingsToSeed.bgBlur ?? 6,
+        shifts: settingsToSeed.shifts || DEFAULT_SHIFTS,
+      });
+
+      // 3. Seed Holidays
+      const holidayBatch = writeBatch(db);
+      for (const h of holidaysToSeed) {
+        holidayBatch.set(doc(db, 'roster_holidays', h.id), {
+          id: h.id,
+          date: h.date,
+          name: h.name,
+          type: h.type,
+          region: h.region,
+        });
+      }
+      await holidayBatch.commit();
+
+      // 4. Seed Delegations
+      const delBatch = writeBatch(db);
+      for (const d of delegationsToSeed) {
+        delBatch.set(doc(db, 'roster_delegations', d.id), {
+          id: d.id,
+          title: d.title,
+          content: d.content,
+          authorName: d.authorName,
+          assignedTo: d.assignedTo || '',
+          priority: d.priority,
+          status: d.status,
+          dateStr: d.dateStr,
+          timeStr: d.timeStr,
+          createdAt: d.createdAt,
+        });
+      }
+      await delBatch.commit();
+
+      // 5. Seed Leaves
+      if (leavesToSeed.length > 0) {
+        const leaveBatch = writeBatch(db);
+        for (const l of leavesToSeed) {
+          leaveBatch.set(doc(db, 'roster_leaves', l.id), {
+            id: l.id,
+            staffId: l.staffId,
+            dateStart: l.dateStart,
+            dateEnd: l.dateEnd,
+            type: l.type,
+            notes: l.notes || '',
+          });
+        }
+        await leaveBatch.commit();
+      }
+
+      // 6. Seed Schedules (in chunks of 200 for batch limit)
+      const chunkSize = 200;
+      for (let i = 0; i < schedulesToSeed.length; i += chunkSize) {
+        const chunk = schedulesToSeed.slice(i, i + chunkSize);
+        const schedBatch = writeBatch(db);
+        for (const sc of chunk) {
+          schedBatch.set(doc(db, 'roster_schedules', sc.id), {
+            id: sc.id,
+            staffId: sc.staffId,
+            date: sc.date,
+            shiftId: sc.shiftId,
+            createdAt: sc.createdAt || new Date().toISOString(),
+            updatedAt: sc.updatedAt || new Date().toISOString(),
+          });
+        }
+        await schedBatch.commit();
+      }
+    } catch (err) {
+      console.error('Error during initial cloud database seeding:', err);
+    }
+  },
+
+  subscribeStaff(onData: (staff: Staff[]) => void): Unsubscribe {
+    const colPath = 'roster_staff';
+    return onSnapshot(
+      collection(db, colPath),
+      snapshot => {
+        const list: Staff[] = [];
+        snapshot.forEach(docSnap => {
+          list.push(docSnap.data() as Staff);
+        });
+        list.sort((a, b) => a.order - b.order);
+        if (list.length > 0) {
+          onData(list);
+          LocalDB.saveStaff(list);
+        }
+      },
+      error => {
+        handleFirestoreError(error, OperationType.GET, colPath);
+      }
+    );
+  },
+
+  subscribeSchedules(onData: (schedules: ScheduleAssignment[]) => void): Unsubscribe {
+    const colPath = 'roster_schedules';
+    return onSnapshot(
+      collection(db, colPath),
+      snapshot => {
+        const list: ScheduleAssignment[] = [];
+        snapshot.forEach(docSnap => {
+          list.push(docSnap.data() as ScheduleAssignment);
+        });
+        if (list.length > 0) {
+          onData(list);
+          LocalDB.saveSchedules(list);
+        }
+      },
+      error => {
+        handleFirestoreError(error, OperationType.GET, colPath);
+      }
+    );
+  },
+
+  subscribeLeaves(onData: (leaves: Leave[]) => void): Unsubscribe {
+    const colPath = 'roster_leaves';
+    return onSnapshot(
+      collection(db, colPath),
+      snapshot => {
+        const list: Leave[] = [];
+        snapshot.forEach(docSnap => {
+          list.push(docSnap.data() as Leave);
+        });
+        onData(list);
+        LocalDB.saveLeaves(list);
+      },
+      error => {
+        handleFirestoreError(error, OperationType.GET, colPath);
+      }
+    );
+  },
+
+  subscribeHolidays(onData: (holidays: Holiday[]) => void): Unsubscribe {
+    const colPath = 'roster_holidays';
+    return onSnapshot(
+      collection(db, colPath),
+      snapshot => {
+        const list: Holiday[] = [];
+        snapshot.forEach(docSnap => {
+          list.push(docSnap.data() as Holiday);
+        });
+        if (list.length > 0) {
+          onData(list);
+          LocalDB.saveHolidays(list);
+        }
+      },
+      error => {
+        handleFirestoreError(error, OperationType.GET, colPath);
+      }
+    );
+  },
+
+  subscribeDelegations(onData: (delegations: DelegationLog[]) => void): Unsubscribe {
+    const colPath = 'roster_delegations';
+    return onSnapshot(
+      collection(db, colPath),
+      snapshot => {
+        const list: DelegationLog[] = [];
+        snapshot.forEach(docSnap => {
+          list.push(docSnap.data() as DelegationLog);
+        });
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        onData(list);
+        LocalDB.saveDelegations(list);
+      },
+      error => {
+        handleFirestoreError(error, OperationType.GET, colPath);
+      }
+    );
+  },
+
+  subscribeSettings(onData: (settings: WorkRulesSettings) => void): Unsubscribe {
+    const docPath = 'roster_settings/global';
+    return onSnapshot(
+      doc(db, 'roster_settings', 'global'),
+      docSnap => {
+        if (docSnap.exists()) {
+          const cloudSettings = docSnap.data() as WorkRulesSettings;
+          const merged: WorkRulesSettings = {
+            ...DEFAULT_SETTINGS,
+            ...cloudSettings,
+            shifts: {
+              ...DEFAULT_SHIFTS,
+              ...(cloudSettings.shifts || {}),
+            },
+          };
+          onData(merged);
+          LocalDB.saveSettings(merged);
+        }
+      },
+      error => {
+        handleFirestoreError(error, OperationType.GET, docPath);
+      }
+    );
+  },
+
+  async saveStaff(staff: Staff): Promise<void> {
+    const docPath = `roster_staff/${staff.id}`;
+    try {
+      await setDoc(doc(db, 'roster_staff', staff.id), {
+        id: staff.id,
+        name: staff.name,
+        active: staff.active,
+        order: staff.order,
+        role: staff.role || 'NOC Engineer',
+        phone: staff.phone || '',
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, docPath);
+    }
+  },
+
+  async saveStaffList(staffList: Staff[]): Promise<void> {
+    const colPath = 'roster_staff';
+    try {
+      const batch = writeBatch(db);
+      for (const s of staffList) {
+        batch.set(doc(db, 'roster_staff', s.id), {
+          id: s.id,
+          name: s.name,
+          active: s.active,
+          order: s.order,
+          role: s.role || 'NOC Engineer',
+          phone: s.phone || '',
+        });
+      }
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, colPath);
+    }
+  },
+
+  async deleteStaff(id: string): Promise<void> {
+    const docPath = `roster_staff/${id}`;
+    try {
+      await deleteDoc(doc(db, 'roster_staff', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, docPath);
+    }
+  },
+
+  async saveSchedules(schedules: ScheduleAssignment[]): Promise<void> {
+    const colPath = 'roster_schedules';
+    try {
+      // Chunk batches of 200
+      const chunkSize = 200;
+      for (let i = 0; i < schedules.length; i += chunkSize) {
+        const chunk = schedules.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        for (const sc of chunk) {
+          batch.set(doc(db, 'roster_schedules', sc.id), {
+            id: sc.id,
+            staffId: sc.staffId,
+            date: sc.date,
+            shiftId: sc.shiftId,
+            createdAt: sc.createdAt || new Date().toISOString(),
+            updatedAt: sc.updatedAt || new Date().toISOString(),
+          });
+        }
+        await batch.commit();
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, colPath);
+    }
+  },
+
+  async deleteSchedule(id: string): Promise<void> {
+    const docPath = `roster_schedules/${id}`;
+    try {
+      await deleteDoc(doc(db, 'roster_schedules', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, docPath);
+    }
+  },
+
+  async saveLeave(leave: Leave): Promise<void> {
+    const docPath = `roster_leaves/${leave.id}`;
+    try {
+      await setDoc(doc(db, 'roster_leaves', leave.id), {
+        id: leave.id,
+        staffId: leave.staffId,
+        dateStart: leave.dateStart,
+        dateEnd: leave.dateEnd,
+        type: leave.type,
+        notes: leave.notes || '',
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, docPath);
+    }
+  },
+
+  async saveLeavesBatch(leaves: Leave[]): Promise<void> {
+    const colPath = 'roster_leaves';
+    try {
+      const batch = writeBatch(db);
+      for (const l of leaves) {
+        batch.set(doc(db, 'roster_leaves', l.id), {
+          id: l.id,
+          staffId: l.staffId,
+          dateStart: l.dateStart,
+          dateEnd: l.dateEnd,
+          type: l.type,
+          notes: l.notes || '',
+        });
+      }
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, colPath);
+    }
+  },
+
+  async deleteLeave(id: string): Promise<void> {
+    const docPath = `roster_leaves/${id}`;
+    try {
+      await deleteDoc(doc(db, 'roster_leaves', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, docPath);
+    }
+  },
+
+  async saveHoliday(holiday: Holiday): Promise<void> {
+    const docPath = `roster_holidays/${holiday.id}`;
+    try {
+      await setDoc(doc(db, 'roster_holidays', holiday.id), {
+        id: holiday.id,
+        date: holiday.date,
+        name: holiday.name,
+        type: holiday.type,
+        region: holiday.region,
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, docPath);
+    }
+  },
+
+  async deleteHoliday(id: string): Promise<void> {
+    const docPath = `roster_holidays/${id}`;
+    try {
+      await deleteDoc(doc(db, 'roster_holidays', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, docPath);
+    }
+  },
+
+  async saveDelegation(delegation: DelegationLog): Promise<void> {
+    const docPath = `roster_delegations/${delegation.id}`;
+    try {
+      await setDoc(doc(db, 'roster_delegations', delegation.id), {
+        id: delegation.id,
+        title: delegation.title,
+        content: delegation.content,
+        authorName: delegation.authorName,
+        assignedTo: delegation.assignedTo || '',
+        priority: delegation.priority,
+        status: delegation.status,
+        dateStr: delegation.dateStr,
+        timeStr: delegation.timeStr,
+        createdAt: delegation.createdAt,
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, docPath);
+    }
+  },
+
+  async deleteDelegation(id: string): Promise<void> {
+    const docPath = `roster_delegations/${id}`;
+    try {
+      await deleteDoc(doc(db, 'roster_delegations', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, docPath);
+    }
+  },
+
+  async saveSettings(settings: WorkRulesSettings): Promise<void> {
+    const docPath = 'roster_settings/global';
+    try {
+      await setDoc(doc(db, 'roster_settings', 'global'), {
+        id: 'global',
+        timezone: settings.timezone || 'Asia/Jakarta',
+        region: settings.region || 'Jawa Barat',
+        targetHoursPerMonth: settings.targetHoursPerMonth || 168,
+        workDaysPerWeek: settings.workDaysPerWeek || 5,
+        autoCalculateOvertime: settings.autoCalculateOvertime ?? true,
+        backgroundTheme: settings.backgroundTheme || 'auto',
+        bgDarkOverlay: settings.bgDarkOverlay ?? 75,
+        bgBlur: settings.bgBlur ?? 6,
+        shifts: settings.shifts || DEFAULT_SHIFTS,
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, docPath);
+    }
+  },
+};
+

@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "StaffMember": {
+      "title": "StaffMember",
+      "description": "NOC Engineer and staff record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "active": { "type": "boolean" },
+        "order": { "type": "number" },
+        "role": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "name", "active", "order"]
+    },
+    "ScheduleItem": {
+      "title": "ScheduleItem",
+      "description": "Daily NOC shift duty assignment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "staffId": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 20 },
+        "shiftId": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "staffId", "date", "shiftId"]
+    },
+    "LeaveItem": {
+      "title": "LeaveItem",
+      "description": "Staff leave or day off entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "staffId": { "type": "string", "maxLength": 128 },
+        "dateStart": { "type": "string", "maxLength": 20 },
+        "dateEnd": { "type": "string", "maxLength": 20 },
+        "type": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 300 }
+      },
+      "required": ["id", "staffId", "dateStart", "dateEnd", "type"]
+    },
+    "HolidayItem": {
+      "title": "HolidayItem",
+      "description": "National and regional holiday definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 20 },
+        "name": { "type": "string", "maxLength": 150 },
+        "type": { "type": "string", "maxLength": 50 },
+        "region": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "date", "name", "type", "region"]
+    },
+    "DelegationLogItem": {
+      "title": "DelegationLogItem",
+      "description": "Handover and shift delegation log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "content": { "type": "string", "maxLength": 2000 },
+        "authorName": { "type": "string", "maxLength": 100 },
+        "assignedTo": { "type": "string", "maxLength": 100 },
+        "priority": { "type": "string", "enum": ["normal", "important", "urgent"] },
+        "status": { "type": "string", "enum": ["pending", "in_progress", "done"] },
+        "dateStr": { "type": "string", "maxLength": 20 },
+        "timeStr": { "type": "string", "maxLength": 20 },
+        "createdAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "title", "content", "authorName", "priority", "status", "dateStr"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global work rules and UI preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 50 },
+        "timezone": { "type": "string", "maxLength": 50 },
+        "region": { "type": "string", "maxLength": 100 },
+        "targetHoursPerMonth": { "type": "number" },
+        "workDaysPerWeek": { "type": "number" },
+        "autoCalculateOvertime": { "type": "boolean" },
+        "backgroundTheme": { "type": "string", "maxLength": 50 },
+        "bgDarkOverlay": { "type": "number" },
+        "bgBlur": { "type": "number" }
+      },
+      "required": ["id", "timezone", "region"]
+    }
+  },
+  "firestore": {
+    "/roster_staff/{staffId}": {
+      "schema": "StaffMember",
+      "description": "Staff member collection for NOC team"
+    },
+    "/roster_schedules/{scheduleId}": {
+      "schema": "ScheduleItem",
+      "description": "Shift schedule assignments"
+    },
+    "/roster_leaves/{leaveId}": {
+      "schema": "LeaveItem",
+      "description": "Staff leave applications and records"
+    },
+    "/roster_holidays/{holidayId}": {
+      "schema": "HolidayItem",
+      "description": "Calendar holidays"
+    },
+    "/roster_delegations/{delegationId}": {
+      "schema": "DelegationLogItem",
+      "description": "Delegation and handover logs notepad"
+    },
+    "/roster_settings/{settingId}": {
+      "schema": "AppSettings",
+      "description": "Configuration settings"
+    }
+  }
+}
