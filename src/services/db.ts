@@ -1,13 +1,13 @@
 import { Staff, ShiftConfig, ShiftType, ScheduleAssignment, Leave, Holiday, WorkRulesSettings, DelegationLog } from '../types';
 
 const STORAGE_KEYS = {
-  STAFF: 'noc_roster_staff_v1',
-  SCHEDULES: 'noc_roster_schedules_v1',
-  LEAVES: 'noc_roster_leaves_v2',
-  HOLIDAYS: 'noc_roster_holidays_v1',
-  SETTINGS: 'noc_roster_settings_v2',
-  DELEGATIONS: 'noc_roster_delegations_v1',
-  INITIALIZED: 'noc_roster_initialized_v3',
+  STAFF: 'noc_roster_staff_prod_v1',
+  SCHEDULES: 'noc_roster_schedules_prod_v1',
+  LEAVES: 'noc_roster_leaves_prod_v1',
+  HOLIDAYS: 'noc_roster_holidays_prod_v1',
+  SETTINGS: 'noc_roster_settings_prod_v1',
+  DELEGATIONS: 'noc_roster_delegations_prod_v1',
+  INITIALIZED: 'noc_roster_initialized_prod_v1',
 };
 
 export const DEFAULT_SHIFTS: Record<ShiftType, ShiftConfig> = {
@@ -219,23 +219,60 @@ export function generateSeedSchedule(): ScheduleAssignment[] {
 // Storage Operations
 export const LocalDB = {
   init(): void {
+    // Purge legacy development/test keys from older versions to prevent stale cache conflicts
+    try {
+      const legacyKeys = [
+        'noc_roster_staff_v1',
+        'noc_roster_schedules_v1',
+        'noc_roster_leaves_v1',
+        'noc_roster_leaves_v2',
+        'noc_roster_holidays_v1',
+        'noc_roster_settings_v1',
+        'noc_roster_settings_v2',
+        'noc_roster_delegations_v1',
+        'noc_roster_initialized_v1',
+        'noc_roster_initialized_v2',
+        'noc_roster_initialized_v3',
+      ];
+      legacyKeys.forEach(k => localStorage.removeItem(k));
+    } catch {
+      // ignore storage access errors
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.INITIALIZED)) {
       LocalDB.saveStaff(DEFAULT_STAFF);
       LocalDB.saveSchedules(generateSeedSchedule());
       LocalDB.saveLeaves(DEFAULT_LEAVES);
       LocalDB.saveHolidays(DEFAULT_HOLIDAYS);
+      LocalDB.saveDelegations(DEFAULT_DELEGATIONS);
       LocalDB.saveSettings(DEFAULT_SETTINGS);
       localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
     }
   },
 
-  resetToDefaults(): void {
+  clearCacheAndReinit(): void {
+    try {
+      // Clear all noc_roster related keys
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('noc_roster')) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch {
+      // ignore
+    }
+
     LocalDB.saveStaff(DEFAULT_STAFF);
     LocalDB.saveSchedules(generateSeedSchedule());
     LocalDB.saveLeaves(DEFAULT_LEAVES);
     LocalDB.saveHolidays(DEFAULT_HOLIDAYS);
+    LocalDB.saveDelegations(DEFAULT_DELEGATIONS);
     LocalDB.saveSettings(DEFAULT_SETTINGS);
     localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+  },
+
+  resetToDefaults(): void {
+    LocalDB.clearCacheAndReinit();
   },
 
   getStaff(): Staff[] {

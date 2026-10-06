@@ -1158,21 +1158,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-800 space-y-3">
               <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
                 <RotateCcw className="w-4 h-4" />
-                <span>Reset ke Sample Demo</span>
+                <span>Bersihkan Cache & Reset</span>
               </div>
               <p className="text-xs text-slate-400">
-                Kembalikan data ke roster sample awal dengan tim default (Ramlan, Rafi, Tengku, dll).
+                Bersihkan cache lama peramban dan inisialisasi ulang database bersih untuk deployment.
               </p>
               <button
                 onClick={() => {
-                  if (confirm('Apakah Anda yakin ingin mereset data ke sample awal?')) {
-                    onResetToSample();
-                    showFeedback('Data direset ke konfigurasi sample');
+                  if (confirm('Bersihkan seluruh cache browser dan inisialisasi ulang database NOC bersih?')) {
+                    LocalDB.clearCacheAndReinit();
+                    onReloadAll();
+                    showFeedback('Cache browser berhasil dibersihkan & database diinisialisasi ulang');
                   }
                 }}
-                className="w-full py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs border border-rose-500/30 transition-colors"
+                className="w-full py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs border border-rose-500/30 transition-colors cursor-pointer"
               >
-                Reset ke Default
+                Bersihkan Cache & Reset
               </button>
             </div>
           </div>
