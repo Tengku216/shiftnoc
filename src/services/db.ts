@@ -219,33 +219,40 @@ export function generateSeedSchedule(): ScheduleAssignment[] {
 // Storage Operations
 export const LocalDB = {
   init(): void {
-    // Purge legacy development/test keys from older versions to prevent stale cache conflicts
+    // Safe Data Migration: If user already has data in previous keys, preserve and migrate it to prod keys!
     try {
-      const legacyKeys = [
-        'noc_roster_staff_v1',
-        'noc_roster_schedules_v1',
-        'noc_roster_leaves_v1',
-        'noc_roster_leaves_v2',
-        'noc_roster_holidays_v1',
-        'noc_roster_settings_v1',
-        'noc_roster_settings_v2',
-        'noc_roster_delegations_v1',
-        'noc_roster_initialized_v1',
-        'noc_roster_initialized_v2',
-        'noc_roster_initialized_v3',
+      const legacyPairs: [string, string[]][] = [
+        [STORAGE_KEYS.STAFF, ['noc_roster_staff_v1']],
+        [STORAGE_KEYS.SCHEDULES, ['noc_roster_schedules_v1']],
+        [STORAGE_KEYS.LEAVES, ['noc_roster_leaves_v2', 'noc_roster_leaves_v1']],
+        [STORAGE_KEYS.HOLIDAYS, ['noc_roster_holidays_v1']],
+        [STORAGE_KEYS.SETTINGS, ['noc_roster_settings_v2', 'noc_roster_settings_v1']],
+        [STORAGE_KEYS.DELEGATIONS, ['noc_roster_delegations_v1']],
       ];
-      legacyKeys.forEach(k => localStorage.removeItem(k));
+
+      for (const [prodKey, oldKeys] of legacyPairs) {
+        if (!localStorage.getItem(prodKey)) {
+          for (const oldKey of oldKeys) {
+            const oldData = localStorage.getItem(oldKey);
+            if (oldData) {
+              // Safely migrate the user's data to the new key so nothing is lost!
+              localStorage.setItem(prodKey, oldData);
+              break;
+            }
+          }
+        }
+      }
     } catch {
       // ignore storage access errors
     }
 
     if (!localStorage.getItem(STORAGE_KEYS.INITIALIZED)) {
-      LocalDB.saveStaff(DEFAULT_STAFF);
-      LocalDB.saveSchedules(generateSeedSchedule());
-      LocalDB.saveLeaves(DEFAULT_LEAVES);
-      LocalDB.saveHolidays(DEFAULT_HOLIDAYS);
-      LocalDB.saveDelegations(DEFAULT_DELEGATIONS);
-      LocalDB.saveSettings(DEFAULT_SETTINGS);
+      if (!localStorage.getItem(STORAGE_KEYS.STAFF)) LocalDB.saveStaff(DEFAULT_STAFF);
+      if (!localStorage.getItem(STORAGE_KEYS.SCHEDULES)) LocalDB.saveSchedules(generateSeedSchedule());
+      if (!localStorage.getItem(STORAGE_KEYS.LEAVES)) LocalDB.saveLeaves(DEFAULT_LEAVES);
+      if (!localStorage.getItem(STORAGE_KEYS.HOLIDAYS)) LocalDB.saveHolidays(DEFAULT_HOLIDAYS);
+      if (!localStorage.getItem(STORAGE_KEYS.DELEGATIONS)) LocalDB.saveDelegations(DEFAULT_DELEGATIONS);
+      if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) LocalDB.saveSettings(DEFAULT_SETTINGS);
       localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
     }
   },

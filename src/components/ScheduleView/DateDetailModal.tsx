@@ -148,36 +148,38 @@ export const DateDetailModal: React.FC<DateDetailModalProps> = ({
             )}
           </div>
 
-          {/* SETENGAH HARI */}
-          <div className="p-3 rounded-xl bg-violet-500/10 border border-violet-500/25">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded bg-violet-500 text-white font-bold text-xs flex items-center justify-center">
-                  SH
-                </span>
-                <span className="font-bold text-xs uppercase tracking-wider text-violet-300">
-                  SETENGAH HARI
+          {/* SETENGAH HARI (Khusus hari Sabtu atau jika ada penugasan) */}
+          {(dateObj.getDay() === 6 || shStaff.length > 0) && (
+            <div className="p-3 rounded-xl bg-violet-500/10 border border-violet-500/25">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded bg-violet-500 text-white font-bold text-xs flex items-center justify-center">
+                    SH
+                  </span>
+                  <span className="font-bold text-xs uppercase tracking-wider text-violet-300">
+                    SETENGAH HARI {dateObj.getDay() === 6 ? '(SABTU)' : ''}
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-violet-400/80">
+                  {settings.shifts.setengah_hari?.startTime || '08:00'} - {settings.shifts.setengah_hari?.endTime || '13:00'}
                 </span>
               </div>
-              <span className="text-xs font-mono text-violet-400/80">
-                {settings.shifts.setengah_hari?.startTime || '08:00'} - {settings.shifts.setengah_hari?.endTime || '13:00'}
-              </span>
-            </div>
 
-            {shStaff.length > 0 ? (
-              <div className="space-y-1 pl-1">
-                {shStaff.map(staff => (
-                  <div key={staff.id} className="text-sm text-slate-100 font-medium flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-                    <span>{staff.name}</span>
-                    {staff.role && <span className="text-xs text-slate-400">· {staff.role}</span>}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400 italic pl-1">Tidak ada staff</p>
-            )}
-          </div>
+              {shStaff.length > 0 ? (
+                <div className="space-y-1 pl-1">
+                  {shStaff.map(staff => (
+                    <div key={staff.id} className="text-sm text-slate-100 font-medium flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                      <span>{staff.name}</span>
+                      {staff.role && <span className="text-xs text-slate-400">· {staff.role}</span>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic pl-1">Tidak ada staff</p>
+              )}
+            </div>
+          )}
 
           {/* SORE */}
           <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25">

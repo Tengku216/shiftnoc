@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Staff, ScheduleAssignment, Leave, Holiday, WorkRulesSettings, DelegationLog } from '../../types';
 import { PiketToday } from './PiketToday';
 import { MonthlyCalendar } from './MonthlyCalendar';
 import { DelegationLogWidget } from './DelegationLogWidget';
 import { WorkHoursSummary } from './WorkHoursSummary';
-import { DateDetailModal } from './DateDetailModal';
 import { formatISODate } from '../../utils/dateUtils';
 
 interface ScheduleViewProps {
@@ -47,30 +46,63 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   holidays,
   delegations,
   settings,
-  onOpenEditor,
+  onOpenEditor: _onOpenEditor,
   onAddDelegation,
   onDeleteDelegation,
   onToggleDelegationStatus,
 }) => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const todayStr = formatISODate(wibDate.getFullYear(), wibDate.getMonth() + 1, wibDate.getDate());
+
+  // Handle clicking a date cell in the calendar
+  const handleSelectDate = (dateStr: string) => {
+    // Clear any pending auto-reset timer
+    if (resetTimerRef.current) {
+      clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+
+    if (dateStr === todayStr) {
+      setSelectedDate(null);
+      return;
+    }
+
+    // Set the clicked date to display its shift in the left widget
+    setSelectedDate(dateStr);
+
+    // Automatically reset back to today after 10 seconds silently
+    resetTimerRef.current = setTimeout(() => {
+      setSelectedDate(null);
+      resetTimerRef.current = null;
+    }, 10000);
+  };
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="space-y-6 max-w-[1700px] mx-auto">
       {/* Top 3-Column Layout: Left (Piket Hari Ini) | Center (Monthly Calendar) | Right (Delegation Log) */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
-        {/* Left Column: Piket Hari Ini (3 cols) */}
+        {/* Left Column: Piket Hari Ini / Tanggal Terpilih (3 cols) */}
         <div className="xl:col-span-3 h-full min-h-[460px]">
           <PiketToday
             todayStr={todayStr}
             wibDate={wibDate}
+            selectedDateStr={selectedDate}
             staffList={staffList}
             schedules={schedules}
             leaves={leaves}
             holidays={holidays}
             settings={settings}
-            onSelectDateDetail={setSelectedDate}
           />
         </div>
 
@@ -81,14 +113,21 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             currentMonth={currentMonth}
             onPrevMonth={onPrevMonth}
             onNextMonth={onNextMonth}
-            onJumpToday={onJumpToday}
+            onJumpToday={() => {
+              if (resetTimerRef.current) {
+                clearTimeout(resetTimerRef.current);
+                resetTimerRef.current = null;
+              }
+              setSelectedDate(null);
+              onJumpToday();
+            }}
             staffList={staffList}
             schedules={schedules}
             leaves={leaves}
             holidays={holidays}
             settings={settings}
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
+            selectedDate={selectedDate || todayStr}
+            onSelectDate={handleSelectDate}
           />
         </div>
 
@@ -114,18 +153,6 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
         leaves={leaves}
         holidays={holidays}
         settings={settings}
-      />
-
-      {/* Date Detail Modal */}
-      <DateDetailModal
-        dateStr={selectedDate}
-        onClose={() => setSelectedDate(null)}
-        staffList={staffList}
-        schedules={schedules}
-        leaves={leaves}
-        holidays={holidays}
-        settings={settings}
-        onOpenEditor={onOpenEditor}
       />
     </div>
   );

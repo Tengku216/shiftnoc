@@ -1,32 +1,44 @@
 import React from 'react';
 import { Staff, ScheduleAssignment, Leave, Holiday, WorkRulesSettings } from '../../types';
-import { deriveCellStatus, formatWIBFullDate } from '../../utils/dateUtils';
+import { deriveCellStatus, formatWIBFullDate, parseISODate } from '../../utils/dateUtils';
 import { Sun, Sunset, Moon, ShieldAlert, Coffee } from 'lucide-react';
 
 interface PiketTodayProps {
   todayStr: string;
   wibDate: Date;
+  selectedDateStr?: string | null;
   staffList: Staff[];
   schedules: ScheduleAssignment[];
   leaves: Leave[];
   holidays: Holiday[];
   settings: WorkRulesSettings;
-  onSelectDateDetail: (dateStr: string) => void;
 }
 
 export const PiketToday: React.FC<PiketTodayProps> = ({
   todayStr,
   wibDate,
+  selectedDateStr,
   staffList,
   schedules,
   leaves,
   holidays,
   settings,
-  onSelectDateDetail,
 }) => {
+  const activeDateStr = selectedDateStr || todayStr;
+  const isToday = activeDateStr === todayStr;
+
+  let displayDate: Date;
+  if (isToday) {
+    displayDate = wibDate;
+  } else {
+    const { year, month, day } = parseISODate(activeDateStr);
+    displayDate = new Date(year, month - 1, day);
+  }
+
+  const isSaturday = displayDate.getDay() === 6;
   const activeStaff = staffList.filter(s => s.active);
 
-  // Group staff assignments for today
+  // Group staff assignments for the active date
   const pagiStaff: { staff: Staff; isDual: boolean }[] = [];
   const soreStaff: { staff: Staff; isDual: boolean }[] = [];
   const malamStaff: { staff: Staff; isDual: boolean }[] = [];
@@ -35,7 +47,7 @@ export const PiketToday: React.FC<PiketTodayProps> = ({
   const liburStaff: Staff[] = [];
 
   activeStaff.forEach(staff => {
-    const statusInfo = deriveCellStatus(staff.id, todayStr, schedules, leaves, holidays, settings.shifts);
+    const statusInfo = deriveCellStatus(staff.id, activeDateStr, schedules, leaves, holidays, settings.shifts);
 
     if (statusInfo.isLeave) {
       cutiStaff.push({ staff, leaveInfo: statusInfo.leaveInfo });
@@ -63,7 +75,7 @@ export const PiketToday: React.FC<PiketTodayProps> = ({
     }
   });
 
-  const todayHoliday = holidays.find(h => h.date === todayStr);
+  const activeHoliday = holidays.find(h => h.date === activeDateStr);
 
   return (
     <div className="bg-slate-950/75 backdrop-blur-2xl border border-white/25 rounded-2xl p-5 shadow-2xl flex flex-col h-full text-white">
@@ -71,26 +83,27 @@ export const PiketToday: React.FC<PiketTodayProps> = ({
       <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-white/15">
         <div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />
-            <h2 className="font-bold text-base text-white tracking-wide drop-shadow-md">PIKET HARI INI</h2>
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                isToday ? 'bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50' : 'bg-amber-400'
+              }`}
+            />
+            <h2 className="font-bold text-base text-white tracking-wide drop-shadow-md">
+              {isToday ? 'PIKET HARI INI' : 'DETAIL PIKET'}
+            </h2>
           </div>
-          <p className="text-xs text-slate-300 font-medium mt-0.5 drop-shadow-sm">{formatWIBFullDate(wibDate)}</p>
+          <p className="text-xs text-slate-300 font-medium mt-0.5 drop-shadow-sm">
+            {formatWIBFullDate(displayDate)}
+          </p>
         </div>
-
-        <button
-          onClick={() => onSelectDateDetail(todayStr)}
-          className="text-xs font-bold text-amber-300 hover:text-amber-200 transition-colors px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 border border-white/25 shadow-md cursor-pointer"
-        >
-          Detail
-        </button>
       </div>
 
-      {todayHoliday && (
+      {activeHoliday && (
         <div className="mb-4 p-3 rounded-xl bg-rose-950/90 border border-rose-500/60 flex items-center gap-2.5 text-xs text-rose-100 shadow-md">
           <ShieldAlert className="w-4.5 h-4.5 shrink-0 text-rose-400" />
           <div>
-            <span className="font-bold text-white">{todayHoliday.name}</span>
-            <span className="text-rose-300 ml-1.5 font-medium">({todayHoliday.type} {todayHoliday.region ? `· ${todayHoliday.region}` : ''})</span>
+            <span className="font-bold text-white">{activeHoliday.name}</span>
+            <span className="text-rose-300 ml-1.5 font-medium">({activeHoliday.type} {activeHoliday.region ? `· ${activeHoliday.region}` : ''})</span>
           </div>
         </div>
       )}
@@ -128,36 +141,38 @@ export const PiketToday: React.FC<PiketTodayProps> = ({
           )}
         </div>
 
-        {/* SETENGAH HARI */}
-        <div className="rounded-xl p-3 bg-slate-900/90 border border-violet-500/40 shadow-md transition-all">
-          <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-800/80">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-violet-500 flex items-center justify-center text-white font-black text-xs shadow-sm">
-                SH
+        {/* SETENGAH HARI (Hanya dimunculkan pada hari Sabtu) */}
+        {isSaturday && (
+          <div className="rounded-xl p-3 bg-slate-900/90 border border-violet-500/40 shadow-md transition-all">
+            <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-md bg-violet-500 flex items-center justify-center text-white font-black text-xs shadow-sm">
+                  SH
+                </div>
+                <span className="font-bold text-xs uppercase tracking-wider text-violet-300 drop-shadow-sm">
+                  SETENGAH HARI (SABTU)
+                </span>
               </div>
-              <span className="font-bold text-xs uppercase tracking-wider text-violet-300 drop-shadow-sm">
-                SETENGAH HARI
+              <span className="text-xs font-mono font-bold text-violet-300 bg-violet-950/80 px-2 py-0.5 rounded border border-violet-500/40">
+                {settings.shifts.setengah_hari?.startTime || '08:00'} - {settings.shifts.setengah_hari?.endTime || '13:00'}
               </span>
             </div>
-            <span className="text-xs font-mono font-bold text-violet-300 bg-violet-950/80 px-2 py-0.5 rounded border border-violet-500/40">
-              {settings.shifts.setengah_hari?.startTime || '08:00'} - {settings.shifts.setengah_hari?.endTime || '13:00'}
-            </span>
-          </div>
 
-          {shStaff.length > 0 ? (
-            <ul className="space-y-1.5 pl-1">
-              {shStaff.map(({ staff }) => (
-                <li key={staff.id} className="flex items-center gap-2 text-sm text-white font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
-                  <span className="drop-shadow-sm">{staff.name}</span>
-                  {staff.role && <span className="text-xs text-slate-300 font-normal">· {staff.role}</span>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-slate-400 italic pl-1">Belum ada staff terjadwal</p>
-          )}
-        </div>
+            {shStaff.length > 0 ? (
+              <ul className="space-y-1.5 pl-1">
+                {shStaff.map(({ staff }) => (
+                  <li key={staff.id} className="flex items-center gap-2 text-sm text-white font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
+                    <span className="drop-shadow-sm">{staff.name}</span>
+                    {staff.role && <span className="text-xs text-slate-300 font-normal">· {staff.role}</span>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-slate-400 italic pl-1">Belum ada staff terjadwal</p>
+            )}
+          </div>
+        )}
 
         {/* SORE */}
         <div className="rounded-xl p-3 bg-slate-900/90 border border-emerald-500/40 shadow-md transition-all">
