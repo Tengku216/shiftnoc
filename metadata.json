@@ -1,0 +1,6 @@
+{
+  "name": "NOC Shift Schedule",
+  "description": "Digital NOC Shift Roster & Work Schedule Manager with real-time WIB tracking, interactive roster spreadsheet editor, and shift calculations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
