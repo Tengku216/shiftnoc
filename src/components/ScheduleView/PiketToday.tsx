@@ -78,7 +78,7 @@ export const PiketToday: React.FC<PiketTodayProps> = ({
   const activeHoliday = holidays.find(h => h.date === activeDateStr);
 
   return (
-    <div className="bg-slate-950/75 backdrop-blur-2xl border border-white/25 rounded-2xl p-5 shadow-2xl flex flex-col h-full text-white">
+    <div className="bg-slate-950/75 backdrop-blur-2xl border border-white/25 rounded-2xl p-5 shadow-2xl flex flex-col h-full text-white min-h-0 overflow-hidden">
       {/* Card Header */}
       <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-white/15">
         <div>
@@ -109,7 +109,7 @@ export const PiketToday: React.FC<PiketTodayProps> = ({
       )}
 
       {/* Shifts Stack */}
-      <div className="space-y-3 flex-1 overflow-y-auto pr-1">
+      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1.5 scroll-smooth">
         {/* PAGI */}
         <div className="rounded-xl p-3 bg-slate-900/90 border border-amber-500/40 shadow-md transition-all">
           <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-800/80">

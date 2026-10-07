@@ -91,9 +91,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   return (
     <div className="space-y-6 max-w-[1700px] mx-auto">
       {/* Top 3-Column Layout: Left (Piket Hari Ini) | Center (Monthly Calendar) | Right (Delegation Log) */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
-        {/* Left Column: Piket Hari Ini / Tanggal Terpilih (3 cols) */}
-        <div className="xl:col-span-3 h-full min-h-[460px]">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Piket Hari Ini / Tanggal Terpilih (3 cols - fixed matching height) */}
+        <div className="xl:col-span-3 w-full h-[520px] sm:h-[580px] xl:h-[640px] flex flex-col min-h-0">
           <PiketToday
             todayStr={todayStr}
             wibDate={wibDate}
@@ -106,8 +106,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           />
         </div>
 
-        {/* Center Column: Monthly Calendar (6 cols) */}
-        <div className="xl:col-span-6 h-full min-h-[460px]">
+        {/* Center Column: Monthly Calendar (6 cols - natural unconstrained height, immune to side widget growth) */}
+        <div className="xl:col-span-6 w-full flex flex-col min-h-0">
           <MonthlyCalendar
             currentYear={currentYear}
             currentMonth={currentMonth}
@@ -131,8 +131,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           />
         </div>
 
-        {/* Right Column: DELEGATION LOG (3 cols - identical size to Piket Hari Ini) */}
-        <div className="xl:col-span-3 h-full min-h-[460px]">
+        {/* Right Column: DELEGATION LOG (3 cols - identical size to Piket Hari Ini with internal scrolling) */}
+        <div className="xl:col-span-3 w-full h-[520px] sm:h-[580px] xl:h-[640px] flex flex-col min-h-0">
           <DelegationLogWidget
             delegations={delegations}
             staffList={staffList}
